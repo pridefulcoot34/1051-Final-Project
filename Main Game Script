@@ -1,0 +1,96 @@
+-- Variables 
+local ServerStorage = game:GetService("ServerStorage")
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local mapFolder = ServerStorage:WaitForChild("Maps")
+local weapon = ServerStorage:WaitForChild("Weapons"):WaitForChild("Sword")
+local Status = ReplicatedStorage:WaitForChild("Status")
+
+local gameMapFolder = workspace:WaitForChild("GameMap")
+local roundDuration = 60 -- seconds
+local intermissionTime = 10
+
+-- Function to pick a random map and clone it
+local function loadRandomMap()
+	local maps = mapFolder:GetChildren()
+	local chosenMap = maps[math.random(1, #maps)]
+	local mapClone = chosenMap:Clone()
+	mapClone.Parent = gameMapFolder
+	return mapClone
+end
+
+-- Function to teleport players to map spawn points and give them weapons
+local function preparePlayers(spawnLocations)
+	for i, player in ipairs(Players:GetPlayers()) do
+		if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+			local spawn = spawnLocations[i % #spawnLocations + 1]
+			player.Character.HumanoidRootPart.CFrame = spawn.CFrame + Vector3.new(0, 3, 0)
+
+			local tool = weapon:Clone()
+			tool.Parent = player.Backpack
+		end
+	end
+end
+
+-- Function to count alive players
+local function getAlivePlayers()
+	local alive = {}
+	for _, player in ipairs(Players:GetPlayers()) do
+		local char = player.Character
+		if char and char:FindFirstChild("Humanoid") and char.Humanoid.Health > 0 then
+			table.insert(alive, player)
+		end
+	end
+	return alive
+end
+
+-- Function to start a round
+local function startRound()
+	print("Loading Map...")
+	Status.Value = "Loading Map"
+	local currentMap = loadRandomMap()
+	local spawns = currentMap:WaitForChild("Spawns"):GetChildren() -- Folder named "Spawns"
+
+	print("Preparing Players...")
+	Status.Value = "Spawning Players"
+	preparePlayers(spawns)
+
+	wait(3)
+	print("Round Starting!")
+	Status.Value = "Round Starting in 3 seconds"
+	-- Countdown loop
+	for time = roundDuration, 0, -1 do
+		local alivePlayers = getAlivePlayers()
+		print("Time left:", time, "Alive players:", #alivePlayers)
+		Status.Value = "There are "..time.." seconds remaining, and "..#alivePlayers.." players left"
+		-- End early if only one left
+		if #alivePlayers <= 1 then break end
+		wait(1)
+	end
+
+	-- Give rewards to surviving players
+	local survivors = getAlivePlayers()
+	for _, player in ipairs(survivors) do
+		player.leaderstats.Points.Value += 10
+	end
+
+	print("Round Over! Points awarded to survivors.")
+	Status.Value = "Round Over!"
+	-- Cleanup map
+	currentMap:Destroy()
+end
+
+-- Game loop
+while true do
+	print("Intermission...")
+	Status.Value = "Intermission"
+	-- Countdown loop
+	for time = intermissionTime, 0, -1 do
+		print("Time left:", time)
+		Status.Value = "Game starting in "..intermissionTime.." Seconds"
+		wait(1)
+	end
+	wait(intermissionTime)
+	startRound()
+end
